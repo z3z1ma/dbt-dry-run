@@ -11,6 +11,10 @@ testcov: test
 	@echo "building coverage html"
 	@coverage html
 
+.PHONY: integration
+integration:
+	./integration/integration-test.sh
+
 .PHONY: mypy
 mypy:
 	mypy dbt_dry_run
