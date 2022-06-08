@@ -29,6 +29,11 @@ class NodeConfig(BaseModel):
     check_cols: Optional[Union[Literal["all"], List[str]]]
 
 
+class ManifestColumn(BaseModel):
+    name: str
+    description: Optional[str]
+
+
 class Node(BaseModel):
     name: str
     config: NodeConfig
@@ -42,6 +47,7 @@ class Node(BaseModel):
     resource_type: str
     original_file_path: str
     root_path: str
+    columns: Dict[str, ManifestColumn]
 
     def to_table_ref_literal(self) -> str:
         sql = f"`{self.database}`.`{self.db_schema}`.`{self.alias}`"

@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: first_layer
+    description: Some table
+    columns:
+      - name: a
+        description: a column!
+
+      - name: b
+        description: Another column
+
+      - name: c
+        description: Another Column
+
+  - name: second_layer
+    description: Some other table
+    columns:
+      - name: a
+        description: a column!
+
+      - name: b
+        description: Another column
+
+      - name: c
+        description: Another Column
+
+      - name: seed_b
+
+      - name: my_boolean_col

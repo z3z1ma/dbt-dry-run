@@ -5,6 +5,7 @@ from typing import Dict, Optional
 import jinja2
 import yaml
 
+from dbt_dry_run.column_linting import lint_columns
 from dbt_dry_run.execution import dry_run_manifest
 from dbt_dry_run.models import Manifest, Profile
 from dbt_dry_run.models.profile import read_profiles
@@ -76,8 +77,14 @@ def run() -> int:
 
     reporter = ResultReporter(dry_run_results, set(), parsed_args.verbose)
     exit_code = reporter.report_and_check_results()
+
+    report = reporter.get_report()
+    if report.success:
+        lint_columns(manifest, report)
+
     if parsed_args.report_path:
-        reporter.write_results_artefact(parsed_args.report_path)
+        with open(parsed_args.report_path, "w") as f:
+            f.write(report.json(by_alias=True))
 
     if parsed_args.ignore_result:
         exit_code = 0

@@ -28,7 +28,7 @@ class ResultReporter:
                 f"{index + 1}\t:\t{failure.node.unique_id}\t:\t{exception_col}\t:\t{excluded_col}"
             )
 
-    def write_results_artefact(self, output_path: str) -> None:
+    def get_report(self) -> Report:
         report_nodes: List[ReportNode] = []
         success = True
         node_count = 0
@@ -61,8 +61,7 @@ class ResultReporter:
             nodes=report_nodes,
         )
 
-        with open(output_path, "w") as f:
-            f.write(report.json(by_alias=True))
+        return report
 
     def report_and_check_results(self) -> int:
         failures: List[Tuple[DryRunResult, bool]] = []
