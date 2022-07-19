@@ -2,14 +2,13 @@ from typing import Optional, Tuple, Union
 
 import google
 import google.auth.credentials
-from google.api_core import client_info
+from dbt.adapters.bigquery import BigQueryAdapter
 from google.auth import impersonated_credentials
 from google.cloud.bigquery import (
-    Client,
     DatasetReference,
     QueryJob,
     QueryJobConfig,
-    TableReference,
+    TableReference, Client,
 )
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
 from google.oauth2 import service_account
@@ -24,7 +23,6 @@ from dbt_dry_run.models import BigQueryConnectionMethod, Output, Table, TableFie
 from dbt_dry_run.models.manifest import Node
 from dbt_dry_run.results import DryRunStatus
 from dbt_dry_run.sql_runner import SQLRunner
-from dbt_dry_run.version import VERSION
 
 MAX_ATTEMPT_NUMBER = 5
 QUERY_TIMED_OUT = "Dry run query timed out"
@@ -33,24 +31,8 @@ QUERY_TIMED_OUT = "Dry run query timed out"
 class BigQuerySQLRunner(SQLRunner):
     JOB_CONFIG = QueryJobConfig(dry_run=True, use_query_cache=False)
 
-    def __init__(self, client: Client):
-        self.client = client
-
-    @classmethod
-    def from_profile(cls, output: Output) -> "BigQuerySQLRunner":
-        if output.impersonate_service_account:
-            creds = cls.get_impersonated_bigquery_credentials(output)
-        else:
-            creds = cls.get_bigquery_credentials(output)
-
-        info = client_info.ClientInfo(user_agent=f"dbt-dry-run-{VERSION}")
-        client = Client(
-            project=output.project,
-            credentials=creds,
-            location=output.location,
-            client_info=info,
-        )
-        return cls(client)
+    def __init__(self, adapter: BigQueryAdapter):
+        self._adapter = adapter
 
     @classmethod
     def get_impersonated_bigquery_credentials(
@@ -66,6 +48,10 @@ class BigQuerySQLRunner(SQLRunner):
             ],
             lifetime=int(output.timeout_seconds),
         )
+
+    @property
+    def client(self) -> Client:
+        return self._adapter.connections.get_thread_connection().handle
 
     @classmethod
     def get_bigquery_credentials(

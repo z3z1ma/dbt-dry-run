@@ -2,8 +2,9 @@ import argparse
 import os
 from typing import Dict, Optional
 
-import jinja2
-import yaml
+from dbt.adapters.factory import reset_adapters, register_adapter, get_adapter
+from dbt.config import RuntimeConfig
+from dbt.flags import DEFAULT_PROFILES_DIR, set_from_args
 
 from dbt_dry_run.execution import dry_run_manifest
 from dbt_dry_run.models import Manifest, Profile
@@ -27,9 +28,20 @@ parser.add_argument(
     help="Override default profiles directory from ~/.dbt",
 )
 parser.add_argument(
+    "--project-dir",
+    type=str,
+    default=".",
+    help="Override where to search for `dbt_project.yml`"
+)
+parser.add_argument(
     "--ignore-result",
     action="store_true",
     help="Always exit 0 even if there are failures",
+)
+parser.add_argument(
+    "--check-columns",
+    action="store_true",
+    help="Whether dry runner should check column metadata has been documented accurately"
 )
 parser.add_argument(
     "--model", help="Only dry run this model and its upstream dependencies"
@@ -52,6 +64,24 @@ def read_profiles_file(path: str) -> Dict[str, Profile]:
         file_contents = f.read()
     return read_profiles(file_contents)
 
+class PseudoArgs:
+    def __init__(
+        self,
+        threads: Optional[int] = 1,
+        target: Optional[str] = None,
+        profiles_dir: Optional[str] = None,
+        project_dir: Optional[str] = None,
+        vars: Optional[str] = "{}",
+    ):
+        self.threads = threads
+        if target:
+            self.target = target  # We don't want target in args context if it is None
+        self.profiles_dir = profiles_dir or DEFAULT_PROFILES_DIR
+        self.project_dir = project_dir
+        self.vars = vars  # json.dumps str
+        self.dependencies = []
+        self.single_threaded = threads == 1
+
 
 def run() -> int:
     parsed_args = parser.parse_args()
@@ -65,14 +95,16 @@ def run() -> int:
         )
 
     active_output = parsed_args.target or profile.target
-    try:
-        output = profile.outputs[active_output]
-    except KeyError:
-        raise KeyError(
-            f"Could not find target `{active_output}` in outputs: {list(profile.outputs.keys())}"
-        )
 
-    dry_run_results = dry_run_manifest(manifest, output, parsed_args.model)
+    set_from_args(parsed_args, parsed_args)
+    dbt_project, dbt_profile = RuntimeConfig.collect_parts(parsed_args)
+    dbt_config = RuntimeConfig.from_parts(dbt_project, dbt_profile, parsed_args)
+
+    reset_adapters()
+    register_adapter(dbt_config)
+    adapter = get_adapter(dbt_config)
+
+    dry_run_results = dry_run_manifest(manifest, adapter, parsed_args.model)
 
     reporter = ResultReporter(dry_run_results, set(), parsed_args.verbose)
     exit_code = reporter.report_and_check_results()

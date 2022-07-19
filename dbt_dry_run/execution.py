@@ -54,12 +54,12 @@ def dry_run_node(runners: Dict[str, NodeRunner], node: Node, results: Results) -
 
 @contextmanager
 def create_context(
-    output: Output,
+    adapter: Output,
 ) -> Generator[Tuple[SQLRunner, ThreadPoolExecutor], None, None]:
     sql_runner: Optional[SQLRunner] = None
     executor: Optional[ThreadPoolExecutor] = None
     try:
-        sql_runner = BigQuerySQLRunner.from_profile(output)
+        sql_runner = BigQuerySQLRunner(adapter)
         executor = ThreadPoolExecutor(max_workers=output.threads)
         yield sql_runner, executor
     finally:
@@ -70,10 +70,10 @@ def create_context(
 
 
 def dry_run_manifest(
-    manifest: Manifest, output: Output, model: Optional[str]
+    manifest: Manifest, adapter: Output, model: Optional[str]
 ) -> Results:
     executor: ThreadPoolExecutor
-    with create_context(output) as (sql_runner, executor):
+    with create_context(adapter) as (sql_runner, executor):
         results = Results()
         runners = {t: runner(sql_runner, results) for t, runner in _RUNNERS.items()}
         scheduler = ManifestScheduler(manifest, model)
