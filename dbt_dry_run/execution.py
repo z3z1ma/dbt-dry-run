@@ -3,6 +3,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple
 
+from dbt_dry_run.adapter.service import ProjectService
 from dbt_dry_run.node_runner.snapshot_runner import SnapshotRunner
 from dbt_dry_run.sql_runner import SQLRunner
 
@@ -54,13 +55,13 @@ def dry_run_node(runners: Dict[str, NodeRunner], node: Node, results: Results) -
 
 @contextmanager
 def create_context(
-    adapter: Output,
+        project: ProjectService,
 ) -> Generator[Tuple[SQLRunner, ThreadPoolExecutor], None, None]:
     sql_runner: Optional[SQLRunner] = None
     executor: Optional[ThreadPoolExecutor] = None
     try:
-        sql_runner = BigQuerySQLRunner(adapter)
-        executor = ThreadPoolExecutor(max_workers=output.threads)
+        sql_runner = BigQuerySQLRunner(project)
+        executor = ThreadPoolExecutor(max_workers=1)  # TODO: Set this from something
         yield sql_runner, executor
     finally:
         if executor:
@@ -69,14 +70,12 @@ def create_context(
             sql_runner.close()
 
 
-def dry_run_manifest(
-    manifest: Manifest, adapter: Output, model: Optional[str]
-) -> Results:
+def dry_run_manifest(project: ProjectService) -> Results:
     executor: ThreadPoolExecutor
-    with create_context(adapter) as (sql_runner, executor):
+    with create_context(project) as (sql_runner, executor):
         results = Results()
         runners = {t: runner(sql_runner, results) for t, runner in _RUNNERS.items()}
-        scheduler = ManifestScheduler(manifest, model)
+        scheduler = ManifestScheduler(project.get_dbt_manifest())
 
         print(f"Dry running {len(scheduler)} models")
         for generation_id, generation in enumerate(scheduler):

@@ -1,9 +1,5 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
-import google
-import google.auth.credentials
-from dbt.adapters.bigquery import BigQueryAdapter
-from google.auth import impersonated_credentials
 from google.cloud.bigquery import (
     DatasetReference,
     QueryJob,
@@ -11,7 +7,6 @@ from google.cloud.bigquery import (
     TableReference, Client,
 )
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
-from google.oauth2 import service_account
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -19,7 +14,8 @@ from tenacity import (
     wait_exponential,
 )
 
-from dbt_dry_run.models import BigQueryConnectionMethod, Output, Table, TableField
+from dbt_dry_run.adapter.service import ProjectService
+from dbt_dry_run.models import Table, TableField
 from dbt_dry_run.models.manifest import Node
 from dbt_dry_run.results import DryRunStatus
 from dbt_dry_run.sql_runner import SQLRunner
@@ -31,51 +27,8 @@ QUERY_TIMED_OUT = "Dry run query timed out"
 class BigQuerySQLRunner(SQLRunner):
     JOB_CONFIG = QueryJobConfig(dry_run=True, use_query_cache=False)
 
-    def __init__(self, adapter: BigQueryAdapter):
-        self._adapter = adapter
-
-    @classmethod
-    def get_impersonated_bigquery_credentials(
-        cls, output: Output
-    ) -> impersonated_credentials.Credentials:
-        source_credentials = cls.get_bigquery_credentials(output)
-        return impersonated_credentials.Credentials(
-            source_credentials=source_credentials,
-            target_principal=output.impersonate_service_account,
-            target_scopes=[
-                "https://www.googleapis.com/auth/bigquery",
-                "https://www.googleapis.com/auth/cloud-platform",
-            ],
-            lifetime=int(output.timeout_seconds),
-        )
-
-    @property
-    def client(self) -> Client:
-        return self._adapter.connections.get_thread_connection().handle
-
-    @classmethod
-    def get_bigquery_credentials(
-        cls, output: Output
-    ) -> Union[
-        google.auth.credentials.Credentials, google.oauth2.service_account.Credentials
-    ]:
-        if output.method == BigQueryConnectionMethod.OAUTH:
-            creds, _ = google.auth.default(scopes=output.scopes)
-        elif output.method == BigQueryConnectionMethod.SERVICE_ACCOUNT:
-            if not output.keyfile:
-                raise ValueError(
-                    f"Profile output method is f{BigQueryConnectionMethod.SERVICE_ACCOUNT}"
-                    f" but 'keyfile' is not set"
-                )
-            creds = service_account.Credentials.from_service_account_file(
-                output.keyfile.as_posix(), scopes=output.scopes
-            )
-        else:
-            raise ValueError(f"Unknown output method={output.method}")
-        return creds
-
-    def close(self) -> None:
-        self.client.close()
+    def __init__(self, project: ProjectService):
+        self._project = project
 
     def node_exists(self, node: Node) -> bool:
         return self.get_node_schema(node) is not None
@@ -90,13 +43,20 @@ class BigQuerySQLRunner(SQLRunner):
         except NotFound:
             return None
 
+    @property
+    def client(self) -> Client:
+        return self._project.get_connection().handle
+
+    def close(self) -> None:
+        pass
+
     @retry(
         retry=retry_if_exception_type(BadRequest),
         stop=stop_after_attempt(MAX_ATTEMPT_NUMBER),
         wait=wait_exponential(multiplier=0.5, min=0.5, max=10),
     )
     def query(
-        self, sql: str
+            self, sql: str
     ) -> Tuple[DryRunStatus, Optional[Table], Optional[Exception]]:
         exception = None
         table = None
