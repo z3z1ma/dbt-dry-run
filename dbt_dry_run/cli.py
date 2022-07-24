@@ -12,7 +12,7 @@ from dbt_dry_run.result_reporter import ResultReporter
 
 parser = argparse.ArgumentParser(description="Dry run DBT")
 parser.add_argument(
-    "profile", metavar="PROFILE", type=str, help="The profile to dry run against"
+    "--profile", metavar="PROFILE", type=str, help="The profile to dry run against"
 )
 parser.add_argument(
     "--manifest-path",
