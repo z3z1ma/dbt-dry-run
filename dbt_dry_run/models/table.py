@@ -31,6 +31,7 @@ class BigQueryFieldType(str, Enum):
     BIGNUMERIC = "BIGNUMERIC"
     RECORD = "RECORD"
     STRUCT = "STRUCT"
+    JSON = "JSON"
 
 
 class TableField(BaseModel):
